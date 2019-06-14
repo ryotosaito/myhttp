@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
 	/* ソケットの生成 */
 	if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("reader: socket");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	/* 通信ポート・アドレスの設定 */
@@ -99,21 +99,21 @@ int main(int argc, char *argv[]) {
 	/* ソケットにアドレスを結びつける */
 	if (bind(sockfd, (struct sockaddr *)&reader_addr, sizeof(reader_addr)) < 0) {
 		perror("reader: bind");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	/* コネクト要求をいくつまで待つかを設定 */
 	if (listen(sockfd, 5) < 0) {
 		perror("reader: listen");
 		close(sockfd);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	while (1) {
 		/* コネクト要求を待つ */
 		if ((new_sockfd = accept(sockfd,(struct sockaddr *)&writer_addr, &writer_len)) < 0) {
 			perror("reader: accept");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		simpe_server(new_sockfd);
 	}
