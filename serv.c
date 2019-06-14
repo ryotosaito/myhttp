@@ -10,6 +10,12 @@
 
 char *EOL = "\r\n";
 
+volatile sig_atomic_t e_flag = 0;
+
+void handler(int signum) {
+	e_flag = 1;
+}
+
 void add_header(char *buf, const char *str) {
 	strcat(buf, str);
 	strcat(buf, EOL);
@@ -42,7 +48,8 @@ void render(int status, int sockfd) {
 }
 
 void simpe_server(int new_sockfd) {
-	char *line;
+	fprintf(stderr, "server\n");
+	char *line = NULL;
 	char header[1024];
 	char body[1024];
 	char method[10], path[256], version[10];
@@ -52,11 +59,14 @@ void simpe_server(int new_sockfd) {
 	body[0] = '\0';
 	int phase = 0;
 	FILE *sockfile = fdopen(new_sockfd, "r");
+	fprintf(stderr, "read\n");
 	while((read = getline(&line, &buf_len, sockfile)) > 0) {
+		fprintf(stderr, "%s", line);
 		if (phase == 0) {
 			phase = 1;
 			if (sscanf(line, "%s %s HTTP%s", method, path, version) != 3) {
 				render(400, new_sockfd);
+				free(line);
 				return;
 			}
 		}
@@ -66,7 +76,9 @@ void simpe_server(int new_sockfd) {
 				break;
 			}
 		}
+		line = NULL;
 	}
+	fprintf(stderr, "yay!\n");
 	strcat(body, "<html><body>yay!</body></html>");
 	add_header(header, "HTTP/1.0 200 OK");
 	sprintf(s, "Content-Length: %lu", strlen(body));
@@ -75,6 +87,8 @@ void simpe_server(int new_sockfd) {
 	write(new_sockfd, EOL, strlen(EOL));
 	write(new_sockfd, body, strlen(body));
 	close(new_sockfd);  /* ソケットを閉鎖 */
+	free(line);
+	return;
 }
 
 int main(int argc, char *argv[]) {
@@ -83,12 +97,22 @@ int main(int argc, char *argv[]) {
 	unsigned int writer_len;
 	struct sockaddr_in reader_addr; 
 	struct sockaddr_in writer_addr;
+	int yes = 1;
+
+	if (signal(SIGINT, handler) == SIG_ERR) {
+		/* エラー処理 */
+		fprintf(stderr, "SIG_ERR\n");
+		exit(EXIT_FAILURE);
+	}
+
 
 	/* ソケットの生成 */
 	if ((sockfd = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("reader: socket");
 		exit(EXIT_FAILURE);
 	}
+
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&yes, sizeof(yes));
 
 	/* 通信ポート・アドレスの設定 */
 	bzero((char *) &reader_addr, sizeof(reader_addr));
@@ -109,7 +133,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	while (1) {
+	while (!e_flag) {
 		/* コネクト要求を待つ */
 		if ((new_sockfd = accept(sockfd,(struct sockaddr *)&writer_addr, &writer_len)) < 0) {
 			perror("reader: accept");
@@ -118,4 +142,5 @@ int main(int argc, char *argv[]) {
 		simpe_server(new_sockfd);
 	}
 	close(sockfd);  /* ソケットを閉鎖 */
+	return EXIT_SUCCESS;
 }
