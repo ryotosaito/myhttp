@@ -56,6 +56,15 @@ void render(int status, int sockfd, char *path) {
 		if (fd == -1) {
 			render(404, sockfd, NULL);
 		}
+		if (fstat(fd, &stbuf) != 0) {
+			perror("fstat");
+			exit(EXIT_FAILURE);
+		}
+		// 404 if file is not regular file
+		if ((stbuf.st_mode & S_IFMT) != S_IFREG) {
+			render(404, sockfd, NULL);
+			return;
+		}
 		// 404 if fd cannot open
 		file = fdopen(fd, "rb");
 		if (file == NULL) {
