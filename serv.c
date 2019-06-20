@@ -51,10 +51,12 @@ void render(int status, int sockfd, char *path) {
 		char filename[256];
 		strcpy(filename, cwd);
 		strcat(filename, path);
+		// 404 if file not exists
 		fd = open(filename, O_RDONLY);
 		if (fd == -1) {
 			render(404, sockfd, NULL);
 		}
+		// 404 if fd cannot open
 		file = fdopen(fd, "rb");
 		if (file == NULL) {
 			render(404, sockfd, NULL);
