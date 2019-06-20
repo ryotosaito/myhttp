@@ -48,7 +48,6 @@ void render(int status, int sockfd) {
 }
 
 void simpe_server(int new_sockfd) {
-	fprintf(stderr, "server\n");
 	char *line = NULL;
 	char header[1024];
 	char body[1024];
@@ -59,9 +58,7 @@ void simpe_server(int new_sockfd) {
 	body[0] = '\0';
 	int phase = 0;
 	FILE *sockfile = fdopen(new_sockfd, "r");
-	fprintf(stderr, "read\n");
 	while((read = getline(&line, &buf_len, sockfile)) > 0) {
-		fprintf(stderr, "%s", line);
 		if (phase == 0) {
 			phase = 1;
 			if (sscanf(line, "%s %s HTTP%s", method, path, version) != 3) {
@@ -78,7 +75,6 @@ void simpe_server(int new_sockfd) {
 		}
 		line = NULL;
 	}
-	fprintf(stderr, "yay!\n");
 	strcat(body, "<html><body>yay!</body></html>");
 	add_header(header, "HTTP/1.0 200 OK");
 	sprintf(s, "Content-Length: %lu", strlen(body));
