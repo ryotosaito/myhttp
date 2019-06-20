@@ -9,8 +9,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define min(a,b) (((a)<(b))?(a):(b))
-
 char *EOL = "\r\n";
 
 volatile sig_atomic_t e_flag = 0;
