@@ -1,4 +1,5 @@
 #include <sys/fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -8,9 +9,12 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#define min(a,b) (((a)<(b))?(a):(b))
+
 char *EOL = "\r\n";
 
 volatile sig_atomic_t e_flag = 0;
+char cwd[256];
 
 void handler(int signum) {
 	e_flag = 1;
@@ -21,20 +25,51 @@ void add_header(char *buf, const char *str) {
 	strcat(buf, EOL);
 }
 
-void render(int status, int sockfd) {
+void render(int status, int sockfd, char *path) {
 	char message[64];
 	char line[4096];
 	char header[1024];
 	char body[1024];
 	char s[64];
+	header[0] = '\0';
 	switch (status) {
+		case 200:
+			strcpy(message, "OK");
+			break;
 		case 400:
 			strcpy(message, "Bad request");
 			break;
+		case 404:
+			strcpy(message, "Not found");
+			break;
 	}
 	// body
-	sprintf(body, "<html><head><title>%s</title></head><body><h1><center>%d %s<center></h1><hr><center>myhttp</center</body></html>",
-			message, status, message);
+	if (path != NULL) {
+		FILE *file;
+		int fd;
+		struct stat stbuf;
+		char filename[256];
+		strcpy(filename, cwd);
+		strcat(filename, path);
+		fd = open(filename, O_RDONLY);
+		if (fd == -1) {
+			render(404, sockfd, NULL);
+		}
+		file = fdopen(fd, "rb");
+		if (file == NULL) {
+			render(404, sockfd, NULL);
+			return;
+		}
+		read(fd, body, min(stbuf.st_size-1, 1024-1));
+	}
+	else {
+		sprintf(body,
+				"<html>"
+				"<head><title>%s</title></head>"
+				"<body><h1><center>%d %s</center></h1><hr><center>myhttp</center></body>"
+				"</html>",
+				message, status, message);
+	}
 	// header
 	sprintf(s, "HTTP/1.0 %d %s", status, message);
 	add_header(header, s);
@@ -44,7 +79,6 @@ void render(int status, int sockfd) {
 	write(sockfd, header, strlen(header));
 	write(sockfd, EOL, strlen(EOL));
 	write(sockfd, body, strlen(body));
-	close(sockfd);
 }
 
 void simpe_server(int new_sockfd) {
@@ -57,14 +91,15 @@ void simpe_server(int new_sockfd) {
 	header[0] = '\0';
 	body[0] = '\0';
 	int phase = 0;
+	int status = 200;
 	FILE *sockfile = fdopen(new_sockfd, "r");
 	while((read = getline(&line, &buf_len, sockfile)) > 0) {
 		if (phase == 0) {
 			phase = 1;
-			if (sscanf(line, "%s %s HTTP%s", method, path, version) != 3) {
-				render(400, new_sockfd);
+			if (sscanf(line, "%s %s HTTP%s", method, path, version) == 4) {
+				status = 400;
 				free(line);
-				return;
+				break;
 			}
 		}
 		if (phase == 1) {
@@ -75,15 +110,13 @@ void simpe_server(int new_sockfd) {
 		}
 		line = NULL;
 	}
-	strcat(body, "<html><body>yay!</body></html>");
-	add_header(header, "HTTP/1.0 200 OK");
-	sprintf(s, "Content-Length: %lu", strlen(body));
-	add_header(header, s);
-	write(new_sockfd, header, strlen(header));
-	write(new_sockfd, EOL, strlen(EOL));
-	write(new_sockfd, body, strlen(body));
+	if (status == 200) {
+		render(status, new_sockfd, path);
+	}
+	else {
+		render(status, new_sockfd, NULL);
+	}
 	close(new_sockfd);  /* ソケットを閉鎖 */
-	free(line);
 	return;
 }
 
@@ -94,6 +127,11 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in reader_addr; 
 	struct sockaddr_in writer_addr;
 	int yes = 1;
+
+	if (getcwd(cwd, sizeof(cwd)) == NULL) {
+		 perror("getcwd");
+		 return EXIT_FAILURE;
+	}
 
 	if (signal(SIGINT, handler) == SIG_ERR) {
 		/* エラー処理 */
