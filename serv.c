@@ -31,6 +31,8 @@ void render(int status, int sockfd, char *path) {
 	char header[1024];
 	char body[1024];
 	char s[64];
+	int content_len = 0;
+	int fd;
 	header[0] = '\0';
 	switch (status) {
 		case 200:
@@ -46,7 +48,6 @@ void render(int status, int sockfd, char *path) {
 	// body
 	if (path != NULL) {
 		FILE *file;
-		int fd;
 		struct stat stbuf;
 		char filename[256];
 		strcpy(filename, cwd);
@@ -71,7 +72,7 @@ void render(int status, int sockfd, char *path) {
 			render(404, sockfd, NULL);
 			return;
 		}
-		read(fd, body, min(stbuf.st_size-1, 1024-1));
+		content_len = stbuf.st_size;
 	}
 	else {
 		sprintf(body,
@@ -80,16 +81,26 @@ void render(int status, int sockfd, char *path) {
 				"<body><h1><center>%d %s</center></h1><hr><center>myhttp</center></body>"
 				"</html>",
 				message, status, message);
+		content_len = strlen(body);
 	}
-	// header
+	// construct header
 	sprintf(s, "HTTP/1.0 %d %s", status, message);
 	add_header(header, s);
-	sprintf(s, "Content-Length: %lu", strlen(body));
+	sprintf(s, "Content-Length: %d", content_len);
 	add_header(header, s);
-	// send
+	// send header
 	write(sockfd, header, strlen(header));
 	write(sockfd, EOL, strlen(EOL));
-	write(sockfd, body, strlen(body));
+	// send body
+	if (path != NULL) {
+		ssize_t readlen;
+		while((readlen = read(fd, body, sizeof(body))) > 0) {
+			write(sockfd, body, readlen);
+		}
+	}
+	else {
+		write(sockfd, body, strlen(body));
+	}
 }
 
 void simpe_server(int new_sockfd) {
